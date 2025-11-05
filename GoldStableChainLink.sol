@@ -51,29 +51,100 @@ contract GoldStableChainlink is ERC20, Ownable, ReentrancyGuard {
 
     /// @notice Get gold price from Chainlink, normalized to 18 decimals
     function getGoldPrice() public view returns (uint256 price18, uint256 updatedAt) {
-        // TODO: Retrieve data from priceFeed.latestRoundData()
-        // TODO: Normalize price to 18 decimals
-        // HINT: use priceFeed.decimals() to adjust
+        (
+            , 
+            int256 answer,
+            ,
+            uint256 timeStamp,
+            
+        ) = priceFeed.latestRoundData();
+
+        require(answer > 0, "invalid oracle answer");
+
+        uint8 oracleDecimals = priceFeed.decimals();
+        // Normalize price to 18 decimals
+        if (oracleDecimals < 18) {
+            price18 = uint256(answer) * (10 ** (18 - oracleDecimals));
+        } else {
+            price18 = uint256(answer) / (10 ** (oracleDecimals - 18));
+        }
+
+        updatedAt = timeStamp;
     }
 
     /// @notice Calculate how much collateral is needed to mint `amountGOF`
-    function requiredCollateralForMint(uint256 amountGOF) public view returns (uint256 requiredCollateral) {
-        // TODO: Use gold price and collateral ratio to compute required collateral
-        // HINT: convert between decimals (18 for price, token decimals for collateral)
+    function requiredCollateralForMint(uint256 amountGOF)
+        public
+        view
+        returns (uint256 requiredCollateral)
+    {
+        (uint256 goldPrice, ) = getGoldPrice();
+
+        // USD value of amountGOF in 18 decimals
+        uint256 usdValue = (amountGOF * goldPrice) / 1e18;
+
+        // Apply collateral ratio (e.g. 120%)
+        uint256 adjusted = (usdValue * collateralRatioPct) / 100;
+
+        // Adjust to collateral decimals
+        uint8 colDec = ERC20(address(collateral)).decimals();
+        if (colDec < 18) {
+            requiredCollateral = adjusted / (10 ** (18 - colDec));
+        } else {
+            requiredCollateral = adjusted * (10 ** (colDec - 18));
+        }
     }
 
+    /// @notice Mint GOF by depositing collateral
     function mintWithCollateral(uint256 amountGOF) external nonReentrant {
-        // TODO: calculate required collateral
-        // TODO: transfer collateral from sender
-        // TODO: apply mint fee and mint tokens
-        // TODO: emit Minted event
+        require(amountGOF > 0, "zero amount");
+
+        uint256 required = requiredCollateralForMint(amountGOF);
+
+        // Transfer collateral
+        require(
+            collateral.transferFrom(msg.sender, address(this), required),
+            "collateral transfer failed"
+        );
+
+        // Apply mint fee
+        uint256 fee = (amountGOF * mintFeeBps) / BPS_DENOM;
+        uint256 mintAmountAfterFee = amountGOF - fee;
+
+        // Mint GOF
+        _mint(msg.sender, mintAmountAfterFee);
+
+        emit Minted(msg.sender, mintAmountAfterFee, required);
     }
 
+    /// @notice Redeem GOF for collateral
     function redeem(uint256 amountGOF) external nonReentrant {
-        // TODO: compute gold value of amountGOF
-        // TODO: apply redemption fee
-        // TODO: burn GOF and transfer collateral back
-        // TODO: emit Redeemed event
+        require(amountGOF > 0, "zero amount");
+        require(balanceOf(msg.sender) >= amountGOF, "insufficient GOF");
+
+        (uint256 goldPrice, ) = getGoldPrice();
+        uint8 colDec = ERC20(address(collateral)).decimals();
+
+        // USD value of GOF being redeemed
+        uint256 usdValue = (amountGOF * goldPrice) / 1e18;
+
+        // Convert to collateral decimals
+        uint256 collateralAmount;
+        if (colDec < 18) {
+            collateralAmount = usdValue / (10 ** (18 - colDec));
+        } else {
+            collateralAmount = usdValue * (10 ** (colDec - 18));
+        }
+
+        // Apply redemption fee
+        uint256 fee = (collateralAmount * redeemFeeBps) / BPS_DENOM;
+        uint256 redeemAmount = collateralAmount - fee;
+
+        // Burn GOF and send collateral
+        _burn(msg.sender, amountGOF);
+        require(collateral.transfer(msg.sender, redeemAmount), "collateral transfer failed");
+
+        emit Redeemed(msg.sender, amountGOF, redeemAmount);
     }
 
     // ADMIN FUNCTIONS

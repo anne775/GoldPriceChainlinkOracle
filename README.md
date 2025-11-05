@@ -22,6 +22,7 @@ Construire un **front-end Next.js + Wagmi** qui intègre :
    - Intégrer les fonctions :
      - `mintWithCollateral()`
      - `balanceOf(address)`
+     - `approve(spender, amount)` pour permettre les transactions de tokens entre le smart contract et le token.
 
 3. **Front-end**
    - Afficher le solde (`balanceOf`) du token pour l’adresse connectée.
