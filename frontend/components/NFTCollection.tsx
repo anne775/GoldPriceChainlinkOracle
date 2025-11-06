@@ -110,7 +110,7 @@ export default function NFTCollection() {
 
         try {
         if (needsApproval) {
-            await writeContracts({
+            writeContracts({
             contracts: [
                 { address: TOKEN_CONTRACT_ADDRESS, abi: erc20Abi, functionName: "approve", args: [NFT_COLLECTION_CONTRACT_ADDRESS, mintPrice * BigInt(100)] },
                 { address: NFT_COLLECTION_CONTRACT_ADDRESS as `0x${string}`, abi: NFTCollectionABI, functionName: "mint", args: [tokenURI] },
@@ -118,7 +118,7 @@ export default function NFTCollection() {
             });
             alert("Approval + Mint transaction sent!");
         } else {
-            await writeContracts({
+            writeContracts({
             contracts: [
                 { address: NFT_COLLECTION_CONTRACT_ADDRESS as `0x${string}`, abi: NFTCollectionABI, functionName: "mint", args: [tokenURI] },
             ],
